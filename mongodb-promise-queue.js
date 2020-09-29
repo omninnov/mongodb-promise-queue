@@ -79,6 +79,7 @@ Queue.prototype.createIndexes = function() {
 Queue.prototype.add = function(payload, opts = {}) {
     let delay = opts.delay || this.delay
     let visible = delay ? nowPlusSecs(delay) : now()
+    const session = opts.session || null;
 
     let messages = []
 
@@ -102,7 +103,7 @@ Queue.prototype.add = function(payload, opts = {}) {
         })
     }
 
-    return this.col.insertMany(messages)
+    return this.col.insertMany(messages, { session: session })
     .then(results => {
         return payload instanceof Array ?
             results.insertedIds :

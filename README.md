@@ -32,6 +32,16 @@ queue.add('Hello, World!')
 })
 ```
 
+Add a message to a queue as part of a larger transaction:
+
+```js
+queue.add('Hello, World!', { session: mongoDbSession })
+.then(id => {
+    // Message with payload 'Hello, World!' added.
+    // 'id' is returned, useful for logging.
+})
+```
+
 Get a message from the queue:
 
 ```js
