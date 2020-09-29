@@ -57,6 +57,7 @@ function Queue(mongoDbClient, name, opts = {}) {
     this.col = mongoDbClient.collection(name)
     this.visibility = opts.visibility || 30
     this.delay = opts.delay || 0
+    this.expireDeletedAfterSeconds = opts.expireDeletedAfterSeconds;
 
     if ( opts.deadQueue ) {
         this.deadQueue = opts.deadQueue
@@ -68,10 +69,16 @@ function Queue(mongoDbClient, name, opts = {}) {
 
 Queue.prototype.createIndexes = function() {
     return this.col.createIndex({ deleted : 1, visible : 1 })
-    .then(indexname => {
-        return this.col.createIndex({ ack : 1 }, { unique : true, sparse : true })
-        .then(() => indexname)
+    .then(() => {
+        return this.col.createIndex({ ack : 1 }, { unique : true, sparse : true });
     })
+    .then(() => {
+        if (this.expireDeletedAfterSeconds) {
+            return this.col.createIndex({ deleted: 1 }, { expireAfterSeconds: this.expireDeletedAfterSeconds })
+        } else {
+            return Promise.resolve();
+        }
+    });
 }
 
 // ----------------------------------------------------------------------

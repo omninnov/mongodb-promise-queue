@@ -132,6 +132,20 @@ let notifyOwnerQueue = mongoDbQueue(db, 'notify-owner-queue')
 
 This will create two collections in MongoDB called `resize-image-queue` and `notify-owner-queue`.
 
+### expireDeletedAfterSeconds - Delete processed messages after X seconds ###
+
+Default: none
+
+By default this option is not active, and you have to call `queue.clean()` to remove
+processed messages from the queue.
+
+You may set this to any positive value. For example, set to remove processed messages
+after one hour:
+
+```
+let queue = mongoDbQueue(db, 'queue', { expireDeletedAfterSeconds : 3600 })
+```
+
 ### visibility - Message Visibility Window ###
 
 Default: `30`
