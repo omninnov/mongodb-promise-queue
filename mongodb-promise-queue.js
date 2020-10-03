@@ -10,15 +10,14 @@
  **/
 
 
-let crypto = require('crypto')
-
+const uuid = require('uuid').v1;
 
 // ========================================================================================
 
 
 // some helper functions
 function id() {
-    return crypto.randomBytes(16).toString('hex')
+    return uuid();
 }
 
 // ----------------------------------------------------------------------
@@ -57,6 +56,7 @@ function Queue(mongoDbClient, name, opts = {}) {
     this.col = mongoDbClient.collection(name)
     this.visibility = opts.visibility || 30
     this.delay = opts.delay || 0
+    this.expireDeletedAfterSeconds = opts.expireDeletedAfterSeconds;
 
     if ( opts.deadQueue ) {
         this.deadQueue = opts.deadQueue
@@ -68,10 +68,16 @@ function Queue(mongoDbClient, name, opts = {}) {
 
 Queue.prototype.createIndexes = function() {
     return this.col.createIndex({ deleted : 1, visible : 1 })
-    .then(indexname => {
-        return this.col.createIndex({ ack : 1 }, { unique : true, sparse : true })
-        .then(() => indexname)
+    .then(() => {
+        return this.col.createIndex({ ack : 1 }, { unique : true, sparse : true });
     })
+    .then(() => {
+        if (this.expireDeletedAfterSeconds) {
+            return this.col.createIndex({ deleted: 1 }, { expireAfterSeconds: this.expireDeletedAfterSeconds })
+        } else {
+            return Promise.resolve();
+        }
+    });
 }
 
 // ----------------------------------------------------------------------
@@ -79,6 +85,7 @@ Queue.prototype.createIndexes = function() {
 Queue.prototype.add = function(payload, opts = {}) {
     let delay = opts.delay || this.delay
     let visible = delay ? nowPlusSecs(delay) : now()
+    const session = opts.session || null;
 
     let messages = []
 
@@ -102,7 +109,7 @@ Queue.prototype.add = function(payload, opts = {}) {
         })
     }
 
-    return this.col.insertMany(messages)
+    return this.col.insertMany(messages, { session : session })
     .then(results => {
         return payload instanceof Array ?
             results.insertedIds :
@@ -157,10 +164,10 @@ Queue.prototype.get = function(opts = {}) {
                 // 3) call ourself to return a new message (if exists)
                 return this.deadQueue.add(msg)
                 .then(() => {
-                    this.ack(msg.ack)
+                    return this.ack(msg.ack)
                 })
                 .then(() => {
-                    this.get(opts)
+                    return this.get(opts)
                 })
             }
         }
@@ -173,6 +180,7 @@ Queue.prototype.get = function(opts = {}) {
 
 Queue.prototype.ping = function(ack, opts = {}) {
     let visibility = opts.visibility || this.visibility
+    const session = opts.session || null;
     
     let query = {
         ack     : ack,
@@ -186,7 +194,7 @@ Queue.prototype.ping = function(ack, opts = {}) {
         }
     }
 
-    return this.col.findOneAndUpdate(query, update, { returnOriginal : false })
+    return this.col.findOneAndUpdate(query, update, { returnOriginal : false, session : session })
     .then(msg => {
         if ( !msg.value ) {
             throw new Error("Queue.ping(): Unidentified ack  : " + ack)
@@ -198,7 +206,9 @@ Queue.prototype.ping = function(ack, opts = {}) {
 
 // ----------------------------------------------------------------------
 
-Queue.prototype.ack = function(ack) {
+Queue.prototype.ack = function(ack, opts = {}) {
+    const session = (opts || {}).session || null;
+
     let query = {
         ack     : ack,
         visible : { $gt : now() },
@@ -211,7 +221,7 @@ Queue.prototype.ack = function(ack) {
         }
     }
 
-    return this.col.findOneAndUpdate(query, update, { returnOriginal : false })
+    return this.col.findOneAndUpdate(query, update, { returnOriginal : false, session : session })
     .then(msg => {
         if ( !msg.value ) {
             throw new Error("Queue.ack(): Unidentified ack : " + ack)

@@ -32,6 +32,16 @@ queue.add('Hello, World!')
 })
 ```
 
+Add a message to a queue as part of a larger transaction:
+
+```js
+queue.add('Hello, World!', { session: mongoDbSession })
+.then(id => {
+    // Message with payload 'Hello, World!' added.
+    // 'id' is returned, useful for logging.
+})
+```
+
 Get a message from the queue:
 
 ```js
@@ -54,10 +64,26 @@ queue.ping(msg.ack)
 })
 ```
 
+```js
+queue.ping(msg.ack, { session: mongoDbSession })
+.then(id => {
+    // Visibility window now increased for this message id.
+    // 'id' is returned, useful for logging.
+})
+```
+
 Ack a message (and remove it from the queue):
 
 ```js
 queue.ack(msg.ack)
+.then(id => {
+    // This msg removed from queue for this ack.
+    // The 'id' of the message is returned, useful for logging.
+})
+```
+
+```js
+queue.ack(msg.ack, { session: mongoDbSession })
 .then(id => {
     // This msg removed from queue for this ack.
     // The 'id' of the message is returned, useful for logging.
@@ -131,6 +157,20 @@ let notifyOwnerQueue = mongoDbQueue(db, 'notify-owner-queue')
 ```
 
 This will create two collections in MongoDB called `resize-image-queue` and `notify-owner-queue`.
+
+### expireDeletedAfterSeconds - Delete processed messages after X seconds ###
+
+Default: none
+
+By default this option is not active, and you have to call `queue.clean()` to remove
+processed messages from the queue.
+
+You may set this to any positive value. For example, set to remove processed messages
+after one hour:
+
+```
+let queue = mongoDbQueue(db, 'queue', { expireDeletedAfterSeconds : 3600 })
+```
 
 ### visibility - Message Visibility Window ###
 
